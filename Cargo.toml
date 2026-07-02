@@ -1,0 +1,13 @@
+[package]
+name = "union_find_rust"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+eframe = "0.35.0"
+egui = "0.35.0"
+egui-file-dialog = "0.14.1"
+ringbuf = "0.5.0"
+strum = "0.28.0"
+strum_macros = "0.28.0"
+

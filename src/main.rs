@@ -1,22 +1,15 @@
-use eframe::{egui, wgpu::Color};
-use egui::{
-    Align2, Color32, CornerRadius, FontFamily::Proportional, FontId, Painter, Pos2, Rect, RichText,
-    Scene, Stroke, Ui,
-};
+use eframe::egui;
+use egui::{Color32, Painter, Pos2, Rect, RichText, Scene, Stroke};
 use egui_file_dialog::FileDialog;
 use ringbuf::{
     HeapRb,
-    traits::{Consumer, Producer, RingBuffer},
+    traits::{Consumer, RingBuffer},
 };
 use strum::IntoEnumIterator;
 
-use std::{
-    io::{self},
-    path::PathBuf,
-    time::Duration,
-};
+use std::path::PathBuf;
 
-use union_find_rust::union_find::{Sites, UnionFind, UnionFindChoice};
+use union_find_rust::union_find::{UnionFind, UnionFindChoice};
 
 // fn main() -> io::Result<()> {
 //     read_file::<WeightedQuickUnion>("resources/large.txt")
@@ -200,20 +193,34 @@ impl eframe::App for MyApp {
                                 .scroll_bar_visibility(
                                     egui::scroll_area::ScrollBarVisibility::VisibleWhenNeeded,
                                 )
-                                // .auto_shrink([false; 2])
                                 .show(ui, |ui| {
-                                    if let Some(rb) = &self.ring_buff {
+                                    if let Some(rb) = &self.ring_buff
+                                        && let Some(uf) = &self.union_find
+                                    {
                                         for (p, q, b) in rb.iter() {
                                             ui.label(
                                                 RichText::new(format!("{p} - {q}"))
                                                     .color(if *b {
                                                         Color32::BLACK
                                                     } else {
-                                                        Color32::GRAY
+                                                        Color32::LIGHT_RED
                                                     })
                                                     .size(25.),
                                             );
                                         }
+                                        ui.label(
+                                            RichText::new(
+                                                // Show next line if it exists
+                                                match uf.peak_next() {
+                                                    Some((p, q)) => {
+                                                        format!("Next: {p} - {q}")
+                                                    }
+                                                    None => "Finished".to_string(),
+                                                },
+                                            )
+                                            .color(Color32::GRAY)
+                                            .size(25.),
+                                        );
                                     }
                                 });
                         });
@@ -265,12 +272,20 @@ fn grid_display(uf: &UnionFind, cp_sites: &[usize], painter: &Painter) {
     let mut center = Pos2::ZERO;
     let size = 30.;
 
-    for &val in uf.get_sites().iter() {
+    for (i, &val) in uf.get_sites().iter().enumerate() {
         let rect = Rect::from_min_max(
             (center.x - size, center.y - size).into(),
             (center.x + size, center.y + size).into(),
         );
-        painter.rect_filled(rect, 0, Color32::WHITE);
+        painter.rect_filled(
+            rect,
+            0,
+            if cp_sites[i] != uf.get_sites()[i] {
+                Color32::LIGHT_RED
+            } else {
+                Color32::WHITE
+            },
+        );
         painter.rect_stroke(
             rect,
             0,
@@ -283,7 +298,11 @@ fn grid_display(uf: &UnionFind, cp_sites: &[usize], painter: &Painter) {
             egui::Align2::CENTER_CENTER,
             val.to_string(),
             egui::FontId::proportional(25.0),
-            Color32::BLACK,
+            if cp_sites[i] != uf.get_sites()[i] {
+                Color32::RED
+            } else {
+                Color32::BLACK
+            },
         );
 
         center = (center.x + size * 2., center.y).into();
@@ -351,7 +370,7 @@ fn tree_layout(
     positions: &mut [Pos2],
     next_x: &mut f32,
 ) {
-    // Root
+    // if is Root
     if children[node].is_empty() {
         positions[node] = Pos2::new(*next_x, depth as f32 * 120.0);
         *next_x += 90.0;

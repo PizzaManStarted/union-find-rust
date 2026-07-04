@@ -66,6 +66,7 @@ impl Sites {
 pub struct UnionFind {
     lines: Lines<BufReader<File>>,
     algo: Box<dyn UnionFindAlgo>,
+    next: Option<(usize, usize)>,
     n: usize,
 }
 
@@ -85,7 +86,17 @@ impl UnionFind {
 
         let algo = choice.create(n);
 
-        Ok(Self { lines, algo, n })
+        let next = match lines.next() {
+            Some(val) => read_usize_pair(val.expect("Correct val")),
+            None => None,
+        };
+
+        Ok(Self {
+            lines,
+            algo,
+            next,
+            n,
+        })
     }
 
     pub fn get_n(&self) -> usize {
@@ -110,21 +121,31 @@ impl UnionFind {
     pub fn get_sites(&self) -> &Vec<usize> {
         &self.algo.get_sites().arr
     }
+
+    pub fn peak_next(&self) -> Option<(usize, usize)> {
+        self.next
+    }
 }
 
 impl Iterator for UnionFind {
     type Item = (usize, usize, bool);
 
     fn next(&mut self) -> Option<Self::Item> {
-        let (p, q) =
-            read_usize_pair(self.lines.next()?.expect("string okay")).expect("line not empty");
+        let (p, q) = self.next?;
 
-        if self.algo.connected(p, q) {
+        let res = if self.algo.connected(p, q) {
             Some((p, q, false))
         } else {
             self.algo.union(p, q);
             Some((p, q, true))
-        }
+        };
+
+        self.next = match self.lines.next() {
+            Some(val) => read_usize_pair(val.expect("Correct val")),
+            None => None,
+        };
+
+        res
     }
 }
 

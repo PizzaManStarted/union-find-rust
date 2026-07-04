@@ -13,8 +13,8 @@ impl UnionFindAlgo for QuickUnion {
     }
 
     fn find(&mut self, mut p: usize) -> usize {
-        while p != self.sites.arr[p] {
-            p = self.sites.arr[p]
+        while p != self.sites.get(p) {
+            p = self.sites.get(p);
         }
         p
     }
@@ -27,7 +27,7 @@ impl UnionFindAlgo for QuickUnion {
             return;
         }
 
-        self.sites.arr[p_root] = q_root;
+        self.sites.set(p_root, q_root);
 
         self.sites.count -= 1;
     }
@@ -36,7 +36,6 @@ impl UnionFindAlgo for QuickUnion {
         &self.sites
     }
 }
-
 
 #[derive(Debug)]
 pub struct QuickFind {
@@ -51,7 +50,7 @@ impl UnionFindAlgo for QuickFind {
     }
 
     fn find(&mut self, p: usize) -> usize {
-        self.sites.arr[p]
+        self.sites.get(p)
     }
 
     fn union(&mut self, p: usize, q: usize) {
@@ -63,8 +62,8 @@ impl UnionFindAlgo for QuickFind {
         }
 
         for i in 0..self.sites.length() {
-            if self.sites.arr[i] == p_id {
-                self.sites.arr[i] = q_id;
+            if self.sites.get(i) == p_id {
+                self.sites.set(i, q_id);
             }
         }
         self.sites.count -= 1;

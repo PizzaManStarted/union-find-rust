@@ -14,8 +14,8 @@ impl UnionFindAlgo for WeightedQuickUnion {
     }
 
     fn find(&mut self, mut p: usize) -> usize {
-        while p != self.sites.arr[p] {
-            p = self.sites.arr[p];
+        while p != self.sites.get(p) {
+            p = self.sites.get(p);
         }
         p
     }
@@ -27,10 +27,10 @@ impl UnionFindAlgo for WeightedQuickUnion {
             return;
         }
         if self.lengths[i] < self.lengths[j] {
-            self.sites.arr[i] = j;
+            self.sites.set(i, j);
             self.lengths[j] += self.lengths[i];
         } else {
-            self.sites.arr[j] = i;
+            self.sites.set(j, i);
             self.lengths[i] += self.lengths[j];
         }
         self.sites.count -= 1;

@@ -1,5 +1,5 @@
 use eframe::egui;
-use egui::{Color32, Painter, Pos2, Rect, RichText, Scene, Stroke};
+use egui::{Color32, Painter, Pos2, Rect, RichText, Scene, Stroke, vec2};
 use egui_file_dialog::FileDialog;
 use ringbuf::{
     HeapRb,
@@ -10,10 +10,6 @@ use strum::IntoEnumIterator;
 use std::path::PathBuf;
 
 use union_find_rust::union_find::{UnionFind, UnionFindChoice};
-
-// fn main() -> io::Result<()> {
-//     read_file::<WeightedQuickUnion>("resources/large.txt")
-// }
 
 fn main() -> eframe::Result {
     let options = eframe::NativeOptions::default();
@@ -109,22 +105,23 @@ impl eframe::App for MyApp {
                     if let Some(uf) = &mut self.union_find
                         && let Some(rb) = &mut self.ring_buff
                     {
-                        if ui.button("Next").clicked() {
-                            // Copy BEFORE moving on to the next step
-                            self.copy_sites = Some(uf.get_sites().clone());
-                            let res = uf.next();
-                            if let Some(res) = res {
-                                rb.push_overwrite(res);
+                        ui.add_enabled_ui(uf.has_next(), |ui| {
+                            if ui.button("Next").clicked() {
+                                // Copy BEFORE moving on to the next step
+                                self.copy_sites = Some(uf.get_sites_arr().clone());
+                                let res = uf.next();
+                                if let Some(res) = res {
+                                    rb.push_overwrite(res);
+                                }
                             }
-                        }
-
-                        if ui.button("Finish").clicked() {
-                            for res in uf.into_iter() {
-                                rb.push_overwrite(res);
+                            if ui.button("Finish").clicked() {
+                                for res in uf.into_iter() {
+                                    rb.push_overwrite(res);
+                                }
+                                // Copy AFTER finishing everything (we do not care about the in btw steps)
+                                self.copy_sites = Some(uf.get_sites_arr().clone());
                             }
-                            // Copy AFTER finishing everything (we do not care about the in btw steps)
-                            self.copy_sites = Some(uf.get_sites().clone());
-                        }
+                        });
 
                         if ui.button("Reset").clicked() {
                             self.to_reload = true;
@@ -132,12 +129,20 @@ impl eframe::App for MyApp {
 
                         ui.separator();
 
+                        if self.picked_algo == UnionFindChoice::QuickFind {
+                            self.tree_view = false;
+                        }
+
                         ui.add_enabled_ui(self.picked_algo != UnionFindChoice::QuickFind, |ui| {
                             ui.checkbox(&mut self.tree_view, "Show tree view")
                                 .on_disabled_hover_text(
                                     "QuickFind does not have really work as a tree representation",
                                 );
                         });
+
+                        ui.separator();
+
+                        ui.label(format!("Total accesses: {}", uf.get_sites().count_access()));
                     }
                 });
 
@@ -174,7 +179,7 @@ impl eframe::App for MyApp {
                     self.picked_file = None;
                 } else {
                     self.ring_buff = Some(HeapRb::new(uf.get_n()));
-                    self.copy_sites = Some(uf.get_sites().clone());
+                    self.copy_sites = Some(uf.get_sites_arr().clone());
                     self.union_find = Some(uf);
                 }
 
@@ -271,8 +276,15 @@ impl eframe::App for MyApp {
 fn grid_display(uf: &UnionFind, cp_sites: &[usize], painter: &Painter) {
     let mut center = Pos2::ZERO;
     let size = 30.;
+    painter.text(
+        center + vec2(-size * 2., -size * 2.),
+        egui::Align2::CENTER_CENTER,
+        "index:",
+        egui::FontId::proportional(20.0),
+        Color32::BLACK,
+    );
 
-    for (i, &val) in uf.get_sites().iter().enumerate() {
+    for (i, &val) in uf.get_sites_arr().iter().enumerate() {
         let rect = Rect::from_min_max(
             (center.x - size, center.y - size).into(),
             (center.x + size, center.y + size).into(),
@@ -280,7 +292,7 @@ fn grid_display(uf: &UnionFind, cp_sites: &[usize], painter: &Painter) {
         painter.rect_filled(
             rect,
             0,
-            if cp_sites[i] != uf.get_sites()[i] {
+            if cp_sites[i] != uf.get_sites_arr()[i] {
                 Color32::LIGHT_RED
             } else {
                 Color32::WHITE
@@ -292,13 +304,25 @@ fn grid_display(uf: &UnionFind, cp_sites: &[usize], painter: &Painter) {
             Stroke::new(2.0, Color32::BLACK),
             egui::StrokeKind::Middle,
         );
+        // Index above row:
+        painter.text(
+            center + vec2(0., -size * 2.),
+            egui::Align2::CENTER_CENTER,
+            i,
+            egui::FontId::proportional(20.0),
+            if cp_sites[i] != uf.get_sites_arr()[i] {
+                Color32::RED
+            } else {
+                Color32::BLACK
+            },
+        );
 
         painter.text(
             center,
             egui::Align2::CENTER_CENTER,
             val.to_string(),
             egui::FontId::proportional(25.0),
-            if cp_sites[i] != uf.get_sites()[i] {
+            if cp_sites[i] != uf.get_sites_arr()[i] {
                 Color32::RED
             } else {
                 Color32::BLACK
@@ -321,7 +345,7 @@ fn tree_display(uf: &UnionFind, cp_sites: &[usize], painter: &Painter) {
         next_x += 80.0; // next tree
     }
 
-    for (i, &parent) in uf.get_sites().iter().enumerate() {
+    for (i, &parent) in uf.get_sites_arr().iter().enumerate() {
         if i != parent {
             painter.line_segment(
                 [positions[parent], positions[i]],
@@ -334,7 +358,7 @@ fn tree_display(uf: &UnionFind, cp_sites: &[usize], painter: &Painter) {
         painter.circle_filled(
             *pos,
             radius,
-            if cp_sites[i] != uf.get_sites()[i] {
+            if cp_sites[i] != uf.get_sites_arr()[i] {
                 Color32::LIGHT_RED
             } else {
                 Color32::WHITE
@@ -345,7 +369,7 @@ fn tree_display(uf: &UnionFind, cp_sites: &[usize], painter: &Painter) {
             radius,
             Stroke::new(
                 2.0,
-                if cp_sites[i] != uf.get_sites()[i] {
+                if cp_sites[i] != uf.get_sites_arr()[i] {
                     Color32::RED
                 } else {
                     Color32::BLACK

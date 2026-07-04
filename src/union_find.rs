@@ -46,8 +46,9 @@ pub trait UnionFindAlgo {
 
 #[derive(Debug, Clone)]
 pub struct Sites {
-    pub arr: Vec<usize>,
+    arr: Vec<usize>,
     pub count: usize,
+    access_count: usize,
 }
 
 impl Sites {
@@ -55,11 +56,26 @@ impl Sites {
         Self {
             arr: (0..n).collect(),
             count: n,
+            access_count: 0,
         }
+    }
+
+    pub fn set(&mut self, i: usize, new_val: usize) {
+        self.access_count += 1;
+        self.arr[i] = new_val;
+    }
+
+    pub fn get(&mut self, i: usize) -> usize {
+        self.access_count += 1;
+        self.arr[i]
     }
 
     pub fn length(&self) -> usize {
         self.arr.len()
+    }
+
+    pub fn count_access(&self) -> usize {
+        self.access_count
     }
 }
 
@@ -118,12 +134,20 @@ impl UnionFind {
         (roots, children)
     }
 
-    pub fn get_sites(&self) -> &Vec<usize> {
+    pub fn get_sites_arr(&self) -> &Vec<usize> {
         &self.algo.get_sites().arr
     }
 
     pub fn peak_next(&self) -> Option<(usize, usize)> {
         self.next
+    }
+
+    pub fn get_sites(&self) -> &Sites {
+        self.algo.get_sites()
+    }
+
+    pub fn has_next(&self) -> bool {
+        self.next.is_some()
     }
 }
 

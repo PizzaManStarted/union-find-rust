@@ -7,9 +7,11 @@ use ringbuf::{
 };
 use strum::IntoEnumIterator;
 
-use std::path::PathBuf;
+use std::{fs, path::PathBuf};
 
 use union_find_rust::union_find::{UnionFind, UnionFindChoice};
+
+const EXAMPLES_FOLDER: &str = "resources/examples";
 
 fn main() -> eframe::Result {
     let options = eframe::NativeOptions::default();
@@ -26,6 +28,7 @@ fn main() -> eframe::Result {
 
 struct MyApp {
     file_dialog: FileDialog,
+    examples_files: Vec<PathBuf>,
     picked_file: Option<PathBuf>,
     picked_file_name: Option<String>,
     picked_algo: UnionFindChoice,
@@ -48,7 +51,13 @@ struct MyApp {
 
 impl Default for MyApp {
     fn default() -> Self {
+        let examples_files: Vec<PathBuf> = fs::read_dir(EXAMPLES_FOLDER)
+            .expect("correct folder")
+            .map(|d| d.expect("correct path").path())
+            .collect();
+
         Self {
+            examples_files,
             scene_rect: Rect::ZERO,
             file_dialog: Default::default(),
             picked_algo: Default::default(),
@@ -69,16 +78,53 @@ impl eframe::App for MyApp {
         ctx.set_visuals(egui::Visuals::light());
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.horizontal(|ui| {
-                ui.label("Add file:");
-                if ui
-                    .button(if self.picked_file.is_none() {
-                        "Pick file".to_string()
+                egui::ComboBox::from_id_salt("example_combo_box")
+                    .selected_text(if let Some(path_name) = &self.picked_file_name {
+                        path_name.to_string()
                     } else {
-                        self.picked_file_name.as_ref().expect("msg").to_string()
+                        "Pick example".to_string()
                     })
-                    .clicked()
-                {
+                    .show_ui(ui, |ui| {
+                        let curr_file = self.picked_file.clone();
+                        self.examples_files.iter().for_each(|path| {
+                            ui.selectable_value(
+                                &mut self.picked_file,
+                                Some(path.clone()),
+                                path.file_name()
+                                    .expect("is some")
+                                    .to_str()
+                                    .expect("is valid ascii"),
+                            );
+                        });
+
+                        if !curr_file.eq(&self.picked_file) {
+                            self.to_reload = true;
+                        }
+                    });
+                ui.label("Add file:");
+                if ui.button("Import file").clicked() {
                     self.file_dialog.pick_file();
+                }
+
+                self.file_dialog.update(ui);
+                // Check if the user picked a file.
+                if let Some(path) = self.file_dialog.take_picked() {
+                    self.to_reload = true;
+
+                    self.picked_file = Some(path.to_path_buf());
+                }
+                // Check if the user changed the file so we have to update the name.
+                if let Some(path) = &self.picked_file
+                    && self.to_reload
+                {
+                    self.picked_file_name = Some(
+                        path.file_name()
+                            .expect("has a file name")
+                            .to_str()
+                            .expect("correct string path")
+                            .to_string(),
+                    );
+                    // Create union find iterator
                 }
 
                 ui.separator();
@@ -151,22 +197,6 @@ impl eframe::App for MyApp {
                     self.picked_algo = new_choice;
                 }
             });
-
-            self.file_dialog.update(ui);
-            // Check if the user picked a file.
-            if let Some(path) = self.file_dialog.take_picked() {
-                self.to_reload = true;
-
-                self.picked_file_name = Some(
-                    path.file_name()
-                        .expect("has a file name")
-                        .to_str()
-                        .expect("correct string path")
-                        .to_string(),
-                );
-                self.picked_file = Some(path.to_path_buf());
-                // Create union find iterator
-            }
 
             // reload iterator
             if self.to_reload

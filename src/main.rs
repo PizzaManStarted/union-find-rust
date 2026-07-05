@@ -1,18 +1,63 @@
 use eframe::egui;
 use egui::{Color32, Painter, Pos2, Rect, RichText, Scene, Stroke, vec2};
 use egui_file_dialog::FileDialog;
+use include_dir::File;
 use ringbuf::{
     HeapRb,
     traits::{Consumer, RingBuffer},
 };
 use strum::IntoEnumIterator;
 
-use std::{fs, path::PathBuf};
+use std::{
+    fs,
+    io::{self, Cursor},
+    path::PathBuf,
+};
 
 use union_find_rust::union_find::{UnionFind, UnionFindChoice};
 
-const EXAMPLES_FOLDER: &str = "resources/examples";
+static EXAMPLES: include_dir::Dir =
+    include_dir::include_dir!("$CARGO_MANIFEST_DIR/resources/examples");
 
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub enum InputSource {
+    /// Bundled examples
+    Embedded(&'static File<'static>),
+    /// Desktop
+    #[cfg(not(target_arch = "wasm32"))]
+    File(PathBuf),
+}
+
+impl InputSource {
+    pub fn into_bytes(&self) -> io::Result<Vec<u8>> {
+        match self {
+            InputSource::Embedded(file) => Ok(file.contents().to_vec()),
+
+            #[cfg(not(target_arch = "wasm32"))]
+            InputSource::File(path) => {
+                use std::fs;
+
+                let data = fs::read(path)?;
+
+                Ok(data)
+            }
+        }
+    }
+
+    pub fn get_name(&self) -> String {
+        let os_name = match self {
+            InputSource::Embedded(file) => file.path().file_name(),
+
+            #[cfg(not(target_arch = "wasm32"))]
+            InputSource::File(path_buf) => path_buf.file_name(),
+        }
+        .expect("correct name");
+
+        os_name.to_str().expect("correct string path").to_string()
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
 fn main() -> eframe::Result {
     let options = eframe::NativeOptions::default();
 
@@ -26,17 +71,64 @@ fn main() -> eframe::Result {
     )
 }
 
+#[cfg(target_arch = "wasm32")]
+fn main() {
+    use eframe::wasm_bindgen::JsCast as _;
+
+    let web_options = eframe::WebOptions::default();
+
+    wasm_bindgen_futures::spawn_local(async {
+        let document = web_sys::window()
+            .expect("No window")
+            .document()
+            .expect("No document");
+
+        let canvas = document
+            .get_element_by_id("the_canvas_id")
+            .expect("Failed to find the_canvas_id")
+            .dyn_into::<web_sys::HtmlCanvasElement>()
+            .expect("the_canvas_id was not a HtmlCanvasElement");
+
+        let start_result = eframe::WebRunner::new()
+            .start(
+                canvas,
+                web_options,
+                Box::new(|cc| {
+                    cc.egui_ctx.set_visuals(egui::Visuals::dark());
+                    Ok(Box::new(MyApp::default()))
+                }),
+            )
+            .await;
+
+        let loading_text = web_sys::window()
+            .and_then(|w| w.document())
+            .and_then(|d| d.get_element_by_id("loading_text"));
+        if let Some(loading_text) = loading_text {
+            match start_result {
+                Ok(_) => {
+                    loading_text.remove();
+                }
+                Err(e) => {
+                    loading_text.set_inner_html(
+                        "<p> The app has crashed. See the developer console for details. </p>",
+                    );
+                    panic!("Failed to start eframe: {e:?}");
+                }
+            }
+        }
+    });
+}
+
 struct MyApp {
     file_dialog: FileDialog,
-    examples_files: Vec<PathBuf>,
-    picked_file: Option<PathBuf>,
+    picked_input: Option<InputSource>,
     picked_file_name: Option<String>,
     picked_algo: UnionFindChoice,
 
     show_error: bool,
 
     // union find
-    union_find: Option<UnionFind>,
+    union_find: Option<UnionFind<Cursor<Vec<u8>>>>,
     copy_sites: Option<Vec<usize>>,
 
     ring_buff: Option<HeapRb<(usize, usize, bool)>>,
@@ -51,17 +143,11 @@ struct MyApp {
 
 impl Default for MyApp {
     fn default() -> Self {
-        let examples_files: Vec<PathBuf> = fs::read_dir(EXAMPLES_FOLDER)
-            .expect("correct folder")
-            .map(|d| d.expect("correct path").path())
-            .collect();
-
         Self {
-            examples_files,
             scene_rect: Rect::ZERO,
             file_dialog: Default::default(),
             picked_algo: Default::default(),
-            picked_file: Default::default(),
+            picked_input: Default::default(),
             picked_file_name: Default::default(),
             union_find: Default::default(),
             copy_sites: Default::default(),
@@ -85,46 +171,43 @@ impl eframe::App for MyApp {
                         "Pick example".to_string()
                     })
                     .show_ui(ui, |ui| {
-                        let curr_file = self.picked_file.clone();
-                        self.examples_files.iter().for_each(|path| {
+                        let curr_file = self.picked_input.clone();
+                        EXAMPLES.files().for_each(|file| {
                             ui.selectable_value(
-                                &mut self.picked_file,
-                                Some(path.clone()),
-                                path.file_name()
+                                &mut self.picked_input,
+                                Some(InputSource::Embedded(file)),
+                                file.path()
+                                    .file_name()
                                     .expect("is some")
                                     .to_str()
                                     .expect("is valid ascii"),
                             );
                         });
 
-                        if !curr_file.eq(&self.picked_file) {
+                        if !curr_file.eq(&self.picked_input) {
                             self.to_reload = true;
                         }
                     });
-                ui.label("Add file:");
-                if ui.button("Import file").clicked() {
-                    self.file_dialog.pick_file();
-                }
 
-                self.file_dialog.update(ui);
-                // Check if the user picked a file.
-                if let Some(path) = self.file_dialog.take_picked() {
-                    self.to_reload = true;
+                #[cfg(not(target_arch = "wasm32"))]
+                {
+                    if ui.button("Import file").clicked() {
+                        self.file_dialog.pick_file();
+                    }
 
-                    self.picked_file = Some(path.to_path_buf());
+                    self.file_dialog.update(ui);
+                    // Check if the user picked a file.
+                    if let Some(path) = self.file_dialog.take_picked() {
+                        self.to_reload = true;
+
+                        self.picked_input = Some(InputSource::File(path));
+                    }
                 }
                 // Check if the user changed the file so we have to update the name.
-                if let Some(path) = &self.picked_file
+                if let Some(path) = &self.picked_input
                     && self.to_reload
                 {
-                    self.picked_file_name = Some(
-                        path.file_name()
-                            .expect("has a file name")
-                            .to_str()
-                            .expect("correct string path")
-                            .to_string(),
-                    );
-                    // Create union find iterator
+                    self.picked_file_name = Some(path.get_name());
                 }
 
                 ui.separator();
@@ -200,13 +283,15 @@ impl eframe::App for MyApp {
 
             // reload iterator
             if self.to_reload
-                && let Some(path) = &self.picked_file
+                && let Some(file) = &self.picked_input
             {
-                let uf = UnionFind::new(path, &self.picked_algo).expect("no io error");
+                let cursor = Cursor::new(file.into_bytes().expect("correct bytes"));
+
+                let uf = UnionFind::new(cursor, &self.picked_algo).expect("no io error");
                 if uf.get_n() > 1000 {
                     self.show_error = true;
                     self.picked_file_name = None;
-                    self.picked_file = None;
+                    self.picked_input = None;
                 } else {
                     self.ring_buff = Some(HeapRb::new(uf.get_n()));
                     self.copy_sites = Some(uf.get_sites_arr().clone());
@@ -217,7 +302,7 @@ impl eframe::App for MyApp {
             }
 
             ui.separator();
-            if self.picked_file.is_some() {
+            if self.picked_input.is_some() {
                 ui.with_layout(
                     egui::Layout::left_to_right(egui::Align::Max).with_cross_justify(true),
                     |ui| {
@@ -303,7 +388,7 @@ impl eframe::App for MyApp {
     }
 }
 
-fn grid_display(uf: &UnionFind, cp_sites: &[usize], painter: &Painter) {
+fn grid_display(uf: &UnionFind<Cursor<Vec<u8>>>, cp_sites: &[usize], painter: &Painter) {
     let mut center = Pos2::ZERO;
     let size = 30.;
     painter.text(
@@ -363,7 +448,7 @@ fn grid_display(uf: &UnionFind, cp_sites: &[usize], painter: &Painter) {
     }
 }
 
-fn tree_display(uf: &UnionFind, cp_sites: &[usize], painter: &Painter) {
+fn tree_display(uf: &UnionFind<Cursor<Vec<u8>>>, cp_sites: &[usize], painter: &Painter) {
     let radius = 28.;
     let (roots, children) = uf.to_tree();
 

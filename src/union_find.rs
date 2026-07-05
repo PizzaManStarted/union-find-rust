@@ -1,6 +1,6 @@
 use std::{
     fs::File,
-    io::{self, BufRead, BufReader, Lines},
+    io::{self, BufRead, BufReader, Lines, Read},
     path::PathBuf,
 };
 use strum_macros::EnumIter;
@@ -79,20 +79,18 @@ impl Sites {
     }
 }
 
-pub struct UnionFind {
-    lines: Lines<BufReader<File>>,
+pub struct UnionFind<R: Read> {
+    lines: Lines<BufReader<R>>,
     algo: Box<dyn UnionFindAlgo>,
     next: Option<(usize, usize)>,
     n: usize,
 }
 
-impl UnionFind {
-    pub fn new(file_name: &PathBuf, choice: &UnionFindChoice) -> io::Result<Self> {
-        let file = File::open(file_name)?;
+impl<R: Read> UnionFind<R> {
+    pub fn new(reader: R, choice: &UnionFindChoice) -> io::Result<Self> {
+        let file_reader = BufReader::new(reader);
 
-        let file_reader = BufReader::new(file);
-
-        let mut lines: io::Lines<BufReader<File>> = file_reader.lines();
+        let mut lines: io::Lines<BufReader<R>> = file_reader.lines();
 
         let n = lines
             .next()
@@ -151,7 +149,7 @@ impl UnionFind {
     }
 }
 
-impl Iterator for UnionFind {
+impl<R: Read> Iterator for UnionFind<R> {
     type Item = (usize, usize, bool);
 
     fn next(&mut self) -> Option<Self::Item> {

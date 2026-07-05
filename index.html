@@ -19,10 +19,21 @@
             height: 100%;
         }
     </style>
-</head>
+<link rel="modulepreload" href="/union_find_rust-f92a2211dd9f8054.js" crossorigin="anonymous" integrity="sha384-30/uw+qClNCMZKoN0DwZPL27S9kc0yGtaiuL3GpY9H2pkS/cj5tymV9J19dn3riA"><link rel="preload" href="/union_find_rust-f92a2211dd9f8054_bg.wasm" crossorigin="anonymous" integrity="sha384-oX31NnGrGsTiFGIioxyynYxb8QstNZ0wcHiIqmhrbNMaORjMxUuWybTqwy6Lwf4F" as="fetch" type="application/wasm"></head>
 
 <body>
     <canvas id="the_canvas_id"></canvas>
-</body>
+
+<script type="module">
+import init, * as bindings from '/union_find_rust-f92a2211dd9f8054.js';
+const wasm = await init({ module_or_path: '/union_find_rust-f92a2211dd9f8054_bg.wasm' });
+
+
+window.wasmBindings = bindings;
+
+
+dispatchEvent(new CustomEvent("TrunkApplicationStarted", {detail: {wasm}}));
+
+</script></body>
 
 </html>

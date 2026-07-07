@@ -9,7 +9,6 @@ use ringbuf::{
 use strum::IntoEnumIterator;
 
 use std::{
-    fs,
     io::{self, Cursor},
     path::PathBuf,
 };
@@ -319,7 +318,7 @@ impl eframe::App for MyApp {
                                     {
                                         for (p, q, b) in rb.iter() {
                                             ui.label(
-                                                RichText::new(format!("{p} - {q}"))
+                                                RichText::new(format!("{p} ~ {q}"))
                                                     .color(if *b {
                                                         Color32::BLACK
                                                     } else {
@@ -333,7 +332,7 @@ impl eframe::App for MyApp {
                                                 // Show next line if it exists
                                                 match uf.peak_next() {
                                                     Some((p, q)) => {
-                                                        format!("Next: {p} - {q}")
+                                                        format!("Next: {p} ~ {q}")
                                                     }
                                                     None => "Finished".to_string(),
                                                 },

@@ -1,8 +1,4 @@
-use std::{
-    fs::File,
-    io::{self, BufRead, BufReader, Lines, Read},
-    path::PathBuf,
-};
+use std::io::{self, BufRead, BufReader, Lines, Read};
 use strum_macros::EnumIter;
 
 use crate::{
@@ -28,7 +24,6 @@ impl UnionFindChoice {
     }
 }
 
-// TODO: To make things easier with the enum choice: the algo should have access to everything and cannot have a parameter when created ? good luck
 pub trait UnionFindAlgo {
     fn new(n: usize) -> Self
     where

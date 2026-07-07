@@ -37,6 +37,46 @@ impl UnionFindAlgo for QuickUnion {
     }
 }
 
+
+
+#[derive(Debug)]
+pub struct QuickUnionPC {
+    sites: Sites,
+}
+
+impl UnionFindAlgo for QuickUnionPC {
+    fn new(n: usize) -> Self {
+        Self {
+            sites: Sites::new(n),
+        }
+    }
+
+    fn find(&mut self, mut p: usize) -> usize {
+        while p != self.sites.get(p) {
+            p = self.sites.get(p);
+        }
+        p
+    }
+
+    fn union(&mut self, p: usize, q: usize) {
+        let p_root = self.find(p);
+        let q_root = self.find(q);
+
+        if p_root == q_root {
+            return;
+        }
+
+        self.sites.set(p_root, q_root);
+
+        self.sites.count -= 1;
+    }
+
+    fn get_sites(&self) -> &Sites {
+        &self.sites
+    }
+}
+
+
 #[derive(Debug)]
 pub struct QuickFind {
     sites: Sites,
